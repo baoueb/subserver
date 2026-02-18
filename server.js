@@ -131,7 +131,6 @@ app.get('/subtitles/:title/:season/:episode', async (req, res) => {
 
 // Smart /list endpoint: HTML for browsers, JSON for code
 app.get('/list', async (req, res) => {
-  // Check if the client expects HTML
   const acceptHeader = req.get('Accept') || '';
   if (acceptHeader.includes('text/html')) {
     // Serve a styled HTML page that fetches and displays the JSON data
@@ -227,39 +226,25 @@ app.get('/list', async (req, res) => {
     `);
     return;
   }
-
-  // For non-browser requests (like your extension), continue to your existing JSON logic
-  // (This is where you would put your current /list code, or you can reuse the same logic)
-  try {
-    const [files] = await bucket.getFiles({ prefix: 'shows/' });
-    // ... your existing JSON building logic here (the one you already have in your /list route)
-    // I'm omitting it here for brevity, but keep your full existing /list logic below.
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// List all uploaded subtitles (from GCS)
-app.get('/list', async (req, res) => {
+  // JSON response for extension and other API clients
   try {
     const [files] = await bucket.getFiles({ prefix: 'shows/' });
     const shows = {};
 
     for (const file of files) {
       const parts = file.name.split('/');
-      // Expected structure: shows/{title}/[season-{n}/]{episode}.srt
-      if (parts.length < 3) continue; // malformed
+      if (parts.length < 3) continue;
 
       const show = parts[1];
       if (!shows[show]) shows[show] = {};
 
       if (parts.length === 3) {
-        // No season: shows/{title}/{episode}.srt
+        // No season
         const episode = parts[2].replace(/\.srt$/, '');
         if (!Array.isArray(shows[show])) shows[show] = [];
         shows[show].push(episode);
       } else if (parts.length === 4 && parts[2].startsWith('season-')) {
-        // With season: shows/{title}/season-{n}/{episode}.srt
+        // With season
         const season = parts[2];
         const episode = parts[3].replace(/\.srt$/, '');
         if (!shows[show][season]) shows[show][season] = [];
