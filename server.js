@@ -27,9 +27,8 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     if (!title) return res.status(400).json({ error: 'Missing title' });
 
     const safeTitle = sanitise(title);
-    const baseDir = path.join(__dirname, 'subtitles', safeTitle);
+    let baseDir = path.join(__dirname, 'subtitles', safeTitle);
     if (season) {
-      // season can be a number, e.g. "1"
       baseDir = path.join(baseDir, `season-${sanitise(String(season))}`);
     }
     fs.mkdirSync(baseDir, { recursive: true });
@@ -37,35 +36,38 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     const file = req.file;
     if (!file) return res.status(400).json({ error: 'No file uploaded' });
 
-    // Process based on file extension
+    let episode = null; // ← declare once here, at the function level
+
     if (file.originalname.endsWith('.zip')) {
       const zip = new AdmZip(file.buffer);
       const zipEntries = zip.getEntries();
       for (const entry of zipEntries) {
         if (!entry.isDirectory && entry.name.toLowerCase().endsWith('.srt')) {
-          // Assume the entry name is already the episode number, e.g. "1.srt"
           const episodeName = path.basename(entry.name);
           const destPath = path.join(baseDir, episodeName);
           fs.writeFileSync(destPath, entry.getData());
         }
       }
+      // episode stays null for zip uploads
     } else if (file.originalname.toLowerCase().endsWith('.srt')) {
-      // Single file – need the episode number from user (we'll send it in the form)
-      const episode = req.body.episode;
-      if (!episode) return res.status(400).json({ error: 'Episode number required for single .srt file' });
+      episode = req.body.episode;
+      if (!episode) {
+        return res.status(400).json({ error: 'Episode number required for single .srt file' });
+      }
       const destPath = path.join(baseDir, `${episode}.srt`);
       fs.writeFileSync(destPath, file.buffer);
     } else {
       return res.status(400).json({ error: 'Only .srt or .zip files allowed' });
     }
 
-    res.json({ success: true, path: `/${safeTitle}/${episode ? episode : '...'}` });
+    // Build response path safely (episode may be null for zip)
+    const responsePath = episode ? `/${safeTitle}/${episode}` : `/${safeTitle}/...`;
+    res.json({ success: true, path: responsePath });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
-
 // Serve subtitle files
 app.get('/subtitles/:title/:episode', (req, res) => {
   const { title, episode } = req.params;
