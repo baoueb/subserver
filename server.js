@@ -3,16 +3,29 @@ const multer = require('multer');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const AdmZip = require('adm-zip');
 const slugify = require('slugify');
+const { Storage } = require('@google-cloud/storage');
+
+// --- Google Cloud credentials setup ---
+if (process.env.GCS_KEY_JSON) {
+  const tmpFile = path.join(os.tmpdir(), 'gcs-key.json');
+  fs.writeFileSync(tmpFile, process.env.GCS_KEY_JSON);
+  process.env.GOOGLE_APPLICATION_CREDENTIALS = tmpFile;
+}
+
+// Initialize GCS client
+const storage = new Storage();
+const bucketName = 'subserver-subtitles';  // <-- REPLACE WITH YOUR BUCKET NAME
+const bucket = storage.bucket(bucketName);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Enable CORS for your extension (allow any origin for simplicity)
 app.use(cors());
 
-// Configure multer for file uploads (store in memory for processing)
+// Configure multer for file uploads (store in memory)
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Helper to sanitise folder names
@@ -27,16 +40,10 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     if (!title) return res.status(400).json({ error: 'Missing title' });
 
     const safeTitle = sanitise(title);
-    let baseDir = path.join(__dirname, 'subtitles', safeTitle);
-    if (season) {
-      baseDir = path.join(baseDir, `season-${sanitise(String(season))}`);
-    }
-    fs.mkdirSync(baseDir, { recursive: true });
-
     const file = req.file;
     if (!file) return res.status(400).json({ error: 'No file uploaded' });
 
-    let episode = null; // ← declare once here, at the function level
+    let episode = null;
 
     if (file.originalname.endsWith('.zip')) {
       const zip = new AdmZip(file.buffer);
@@ -44,8 +51,16 @@ app.post('/upload', upload.single('file'), async (req, res) => {
       for (const entry of zipEntries) {
         if (!entry.isDirectory && entry.name.toLowerCase().endsWith('.srt')) {
           const episodeName = path.basename(entry.name);
-          const destPath = path.join(baseDir, episodeName);
-          fs.writeFileSync(destPath, entry.getData());
+          // Build GCS destination path
+          let destPath = `shows/${safeTitle}`;
+          if (season) destPath += `/season-${sanitise(String(season))}`;
+          destPath += `/${episodeName}`;
+
+          const blob = bucket.file(destPath);
+          await blob.save(entry.getData(), {
+            contentType: 'text/plain',
+            public: true,   // makes the file publicly readable
+          });
         }
       }
       // episode stays null for zip uploads
@@ -54,13 +69,21 @@ app.post('/upload', upload.single('file'), async (req, res) => {
       if (!episode) {
         return res.status(400).json({ error: 'Episode number required for single .srt file' });
       }
-      const destPath = path.join(baseDir, `${episode}.srt`);
-      fs.writeFileSync(destPath, file.buffer);
+      // Build GCS destination path
+      let destPath = `shows/${safeTitle}`;
+      if (season) destPath += `/season-${sanitise(String(season))}`;
+      destPath += `/${episode}.srt`;
+
+      const blob = bucket.file(destPath);
+      await blob.save(file.buffer, {
+        contentType: 'text/plain',
+        public: true,
+      });
     } else {
       return res.status(400).json({ error: 'Only .srt or .zip files allowed' });
     }
 
-    // Build response path safely (episode may be null for zip)
+    // Build response path (still returns a path string for compatibility)
     const responsePath = episode ? `/${safeTitle}/${episode}` : `/${safeTitle}/...`;
     res.json({ success: true, path: responsePath });
   } catch (err) {
@@ -68,73 +91,76 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-// Serve subtitle files
-app.get('/subtitles/:title/:episode', (req, res) => {
+
+// Serve subtitle files (proxied from GCS)
+app.get('/subtitles/:title/:episode', async (req, res) => {
   const { title, episode } = req.params;
   const safeTitle = sanitise(title);
-  // Allow optional season parameter: /subtitles/:title/:season?/:episode
-  // For simplicity we'll handle only title/episode here
-  const filePath = path.join(__dirname, 'subtitles', safeTitle, `${episode}.srt`);
-  if (fs.existsSync(filePath)) {
+  const filePath = `shows/${safeTitle}/${episode}.srt`;
+
+  try {
+    const file = bucket.file(filePath);
+    const [exists] = await file.exists();
+    if (!exists) return res.status(404).send('Not found');
+
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.sendFile(filePath);
-  } else {
-    res.status(404).send('Not found');
+    file.createReadStream().pipe(res);
+  } catch (err) {
+    res.status(500).send(err.message);
   }
 });
 
-// Optionally add a version with season
-app.get('/subtitles/:title/:season/:episode', (req, res) => {
+// Version with season
+app.get('/subtitles/:title/:season/:episode', async (req, res) => {
   const { title, season, episode } = req.params;
   const safeTitle = sanitise(title);
   const safeSeason = `season-${sanitise(season)}`;
-  const filePath = path.join(__dirname, 'subtitles', safeTitle, safeSeason, `${episode}.srt`);
-  if (fs.existsSync(filePath)) {
+  const filePath = `shows/${safeTitle}/${safeSeason}/${episode}.srt`;
+
+  try {
+    const file = bucket.file(filePath);
+    const [exists] = await file.exists();
+    if (!exists) return res.status(404).send('Not found');
+
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.sendFile(filePath);
-  } else {
-    res.status(404).send('Not found');
+    file.createReadStream().pipe(res);
+  } catch (err) {
+    res.status(500).send(err.message);
   }
 });
 
-// List all uploaded subtitles
-app.get('/list', (req, res) => {
-  const baseDir = path.join(__dirname, 'subtitles');
-  if (!fs.existsSync(baseDir)) return res.json({ shows: [] });
+// List all uploaded subtitles (from GCS)
+app.get('/list', async (req, res) => {
+  try {
+    const [files] = await bucket.getFiles({ prefix: 'shows/' });
+    const shows = {};
 
-  const shows = fs.readdirSync(baseDir).filter(name => {
-    const full = path.join(baseDir, name);
-    return fs.statSync(full).isDirectory();
-  });
+    for (const file of files) {
+      const parts = file.name.split('/');
+      // Expected structure: shows/{title}/[season-{n}/]{episode}.srt
+      if (parts.length < 3) continue; // malformed
 
-  const result = {};
-  shows.forEach(show => {
-    const showPath = path.join(baseDir, show);
-    const items = fs.readdirSync(showPath);
+      const show = parts[1];
+      if (!shows[show]) shows[show] = {};
 
-    // Check for season subfolders (named "season-1", "season-2", etc.)
-    const seasons = items.filter(item => {
-      const full = path.join(showPath, item);
-      return fs.statSync(full).isDirectory() && item.startsWith('season-');
-    });
-
-    if (seasons.length > 0) {
-      result[show] = {};
-      seasons.forEach(season => {
-        const seasonPath = path.join(showPath, season);
-        const episodes = fs.readdirSync(seasonPath)
-          .filter(f => f.endsWith('.srt'))
-          .map(f => f.replace(/\.srt$/, ''));
-        result[show][season] = episodes;
-      });
-    } else {
-      // No season folders – episodes are directly under the show folder
-      const episodes = items.filter(f => f.endsWith('.srt')).map(f => f.replace(/\.srt$/, ''));
-      result[show] = episodes;
+      if (parts.length === 3) {
+        // No season: shows/{title}/{episode}.srt
+        const episode = parts[2].replace(/\.srt$/, '');
+        if (!Array.isArray(shows[show])) shows[show] = [];
+        shows[show].push(episode);
+      } else if (parts.length === 4 && parts[2].startsWith('season-')) {
+        // With season: shows/{title}/season-{n}/{episode}.srt
+        const season = parts[2];
+        const episode = parts[3].replace(/\.srt$/, '');
+        if (!shows[show][season]) shows[show][season] = [];
+        shows[show][season].push(episode);
+      }
     }
-  });
 
-  res.json({ shows: result });
+    res.json({ shows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
