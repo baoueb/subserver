@@ -97,4 +97,44 @@ app.get('/subtitles/:title/:season/:episode', (req, res) => {
   }
 });
 
+// List all uploaded subtitles
+app.get('/list', (req, res) => {
+  const baseDir = path.join(__dirname, 'subtitles');
+  if (!fs.existsSync(baseDir)) return res.json({ shows: [] });
+
+  const shows = fs.readdirSync(baseDir).filter(name => {
+    const full = path.join(baseDir, name);
+    return fs.statSync(full).isDirectory();
+  });
+
+  const result = {};
+  shows.forEach(show => {
+    const showPath = path.join(baseDir, show);
+    const items = fs.readdirSync(showPath);
+
+    // Check for season subfolders (named "season-1", "season-2", etc.)
+    const seasons = items.filter(item => {
+      const full = path.join(showPath, item);
+      return fs.statSync(full).isDirectory() && item.startsWith('season-');
+    });
+
+    if (seasons.length > 0) {
+      result[show] = {};
+      seasons.forEach(season => {
+        const seasonPath = path.join(showPath, season);
+        const episodes = fs.readdirSync(seasonPath)
+          .filter(f => f.endsWith('.srt'))
+          .map(f => f.replace(/\.srt$/, ''));
+        result[show][season] = episodes;
+      });
+    } else {
+      // No season folders – episodes are directly under the show folder
+      const episodes = items.filter(f => f.endsWith('.srt')).map(f => f.replace(/\.srt$/, ''));
+      result[show] = episodes;
+    }
+  });
+
+  res.json({ shows: result });
+});
+
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
