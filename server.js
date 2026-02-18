@@ -381,319 +381,313 @@ app.get('/list', async (req, res) => {
     // For brevity, we'll keep the old HTML but it will fetch JSON and render version buttons.
     // We'll update the inline script to show versions.
     res.send(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Subtitle Catalog</title>
-        <style>
-          body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: #1a1a1a; color: #e0e0e0; line-height: 1.6; margin: 0; padding: 20px; }
-          .container { max-width: 1200px; margin: 0 auto; }
-          h1 { color: #4ade80; border-bottom: 2px solid #333; padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
-          .clear-all { background: #ef4444; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; }
-          .clear-all:hover { background: #dc2626; }
-          .show { background: #2a2a2a; border-radius: 8px; margin-bottom: 20px; padding: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-          .show h2 { margin: 0 0 10px 0; color: #ffd966; font-size: 1.5rem; cursor: context-menu; }
-          .season { margin-left: 20px; margin-bottom: 15px; }
-          .season h3 { color: #9ca3af; margin: 10px 0 5px 0; font-size: 1.2rem; cursor: context-menu; }
-          .episodes { display: flex; flex-wrap: wrap; gap: 8px; }
-          .episode { background: #374151; padding: 5px 12px; border-radius: 20px; font-size: 0.9rem; border: 1px solid #4b5563; color: #d1d5db; cursor: context-menu; display: inline-flex; align-items: center; gap: 4px; }
-          .episode:hover { background: #4b5563; }
-          .version-tag { font-size: 0.7rem; background: #1f2937; padding: 2px 6px; border-radius: 12px; color: #9ca3af; }
-          .source-kitsu { color: #ffa500; }
-          .source-cloud { color: #4ade80; }
-          .no-season { margin-left: 20px; }
-          .loading, .error { text-align: center; padding: 40px; font-size: 1.2rem; }
-          .error { color: #f87171; }
-          .footer { margin-top: 30px; text-align: center; color: #6b7280; font-size: 0.9rem; border-top: 1px solid #333; padding-top: 20px; }
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Subtitle Catalog</title>
+      <style>
+        body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: #1a1a1a; color: #e0e0e0; line-height: 1.6; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { color: #4ade80; border-bottom: 2px solid #333; padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+        .clear-all { background: #ef4444; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+        .clear-all:hover { background: #dc2626; }
+        .show { background: #2a2a2a; border-radius: 8px; margin-bottom: 20px; padding: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .show h2 { margin: 0 0 10px 0; color: #ffd966; font-size: 1.5rem; cursor: context-menu; }
+        .season { margin-left: 20px; margin-bottom: 15px; }
+        .season h3 { color: #9ca3af; margin: 10px 0 5px 0; font-size: 1.2rem; cursor: context-menu; }
+        .episodes { display: flex; flex-wrap: wrap; gap: 8px; }
+        .episode { background: #374151; padding: 5px 12px; border-radius: 20px; font-size: 0.9rem; border: 1px solid #4b5563; color: #d1d5db; cursor: context-menu; display: inline-flex; align-items: center; gap: 4px; }
+        .episode:hover { background: #4b5563; }
+        .version-tag { font-size: 0.7rem; background: #1f2937; padding: 2px 6px; border-radius: 12px; color: #9ca3af; }
+        .source-kitsu { color: #ffa500; }
+        .source-cloud { color: #4ade80; }
+        .no-season { margin-left: 20px; }
+        .loading, .error { text-align: center; padding: 40px; font-size: 1.2rem; }
+        .error { color: #f87171; }
+        .footer { margin-top: 30px; text-align: center; color: #6b7280; font-size: 0.9rem; border-top: 1px solid #333; padding-top: 20px; }
 
-          /* Context menu */
-          #context-menu {
-            position: fixed;
-            background: #1f1f1f;
-            border: 1px solid #4b5563;
-            border-radius: 6px;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.5);
-            padding: 4px 0;
-            z-index: 1000;
-            display: none;
-            min-width: 200px;
+        /* Context menu */
+        #context-menu {
+          position: fixed;
+          background: #1f1f1f;
+          border: 1px solid #4b5563;
+          border-radius: 6px;
+          box-shadow: 0 8px 20px rgba(0,0,0,0.5);
+          padding: 4px 0;
+          z-index: 1000;
+          display: none;
+          min-width: 200px;
+        }
+        #context-menu button {
+          display: block;
+          width: 100%;
+          text-align: left;
+          background: none;
+          border: none;
+          padding: 8px 12px;
+          color: #fff;
+          font-size: 14px;
+          cursor: pointer;
+        }
+        #context-menu button:hover {
+          background: #374151;
+        }
+        #context-menu hr {
+          margin: 4px 0;
+          border: none;
+          border-top: 1px solid #4b5563;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h1>📚 Subtitle Catalog
+          <button class="clear-all" id="clearAllBtn">🗑️ Clear All</button>
+        </h1>
+        <div id="content" class="loading">Loading catalog...</div>
+      </div>
+
+      <div id="context-menu"></div>
+
+      <script>
+        let currentContext = null; // { type, show, season, episode, version }
+
+        // Load API key from localStorage (if any)
+        let apiKey = localStorage.getItem('catalogApiKey') || '';
+
+        function promptApiKey() {
+          const key = prompt('Enter API key (if required):');
+          if (key !== null) {
+            apiKey = key;
+            localStorage.setItem('catalogApiKey', key);
           }
-          #context-menu button {
-            display: block;
-            width: 100%;
-            text-align: left;
-            background: none;
-            border: none;
-            padding: 8px 12px;
-            color: #fff;
-            font-size: 14px;
-            cursor: pointer;
+          return key;
+        }
+
+        async function fetchWithKey(url, options = {}) {
+          if (apiKey) {
+            options.headers = { ...(options.headers || {}), 'x-api-key': apiKey };
           }
-          #context-menu button:hover {
-            background: #374151;
+          const response = await fetch(url, options);
+          if (response.status === 403) {
+            alert('Invalid API key or permission denied.');
+            return null;
           }
-          #context-menu hr {
-            margin: 4px 0;
-            border: none;
-            border-top: 1px solid #4b5563;
+          return response;
+        }
+
+        async function loadCatalog() {
+          try {
+            const response = await fetch('/list', { headers: { 'Accept': 'application/json' } });
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            const data = await response.json();
+            renderCatalog(data.shows);
+          } catch (err) {
+            document.getElementById('content').innerHTML = '<div class="error">❌ Failed to load: ' + err.message + '</div>';
           }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <h1>📚 Subtitle Catalog
-            <button class="clear-all" id="clearAllBtn">🗑️ Clear All</button>
-          </h1>
-          <div id="content" class="loading">Loading catalog...</div>
-        </div>
+        }
 
-        <div id="context-menu"></div>
-
-        <script>
-          let currentContext = null; // { type, show, season, episode, version }
-
-          // Load API key from localStorage (if any)
-          let apiKey = localStorage.getItem('catalogApiKey') || '';
-
-          function promptApiKey() {
-            const key = prompt('Enter API key (if required):');
-            if (key !== null) {
-              apiKey = key;
-              localStorage.setItem('catalogApiKey', key);
-            }
-            return key;
+        function renderCatalog(shows) {
+          const container = document.getElementById('content');
+          if (!shows || Object.keys(shows).length === 0) {
+            container.innerHTML = '<div class="error">📭 No subtitles found in the catalog.</div>';
+            return;
           }
 
-          async function fetchWithKey(url, options = {}) {
-            if (apiKey) {
-              options.headers = { ...options.headers, 'x-api-key': apiKey };
-            }
-            const response = await fetch(url, options);
-            if (response.status === 403) {
-              alert('Invalid API key or permission denied.');
-              return null;
-            }
-            return response;
-          }
+          let html = '';
+          for (const [showName, showData] of Object.entries(shows)) {
+            html += '<div class="show" data-show="' + escapeHtml(showName) + '"><h2>' + escapeHtml(showName) + '</h2>';
 
-          async function loadCatalog() {
-            try {
-              const response = await fetch('/list', { headers: { 'Accept': 'application/json' } });
-              if (!response.ok) throw new Error(`HTTP ${response.status}`);
-              const data = await response.json();
-              renderCatalog(data.shows);
-            } catch (err) {
-              document.getElementById('content').innerHTML = `<div class="error">❌ Failed to load: ${err.message}</div>`;
-            }
-          }
-
-          function renderCatalog(shows) {
-            const container = document.getElementById('content');
-            if (!shows || Object.keys(shows).length === 0) {
-              container.innerHTML = '<div class="error">📭 No subtitles found in the catalog.</div>';
-              return;
-            }
-
-            let html = '';
-            for (const [showName, showData] of Object.entries(shows)) {
-              html += `<div class="show" data-show="${escapeHtml(showName)}"><h2>${escapeHtml(showName)}</h2>`;
-
-              if (Array.isArray(showData)) {
-                // No seasons
-                html += `<div class="no-season">`;
-                showData.forEach(ep => {
-                  const epNum = ep.episode;
-                  html += `<div style="display:flex; flex-wrap:wrap; gap:4px; margin:2px 0;" data-episode="${epNum}">`;
-                  html += `<span style="font-weight:bold; margin-right:8px;">Ep ${epNum}:</span>`;
-                  ep.versions.sort((a,b)=>a.version-b.version).forEach(v => {
-                    const sourceClass = v.source === 'kitsu' ? 'source-kitsu' : 'source-cloud';
-                    html += `<span class="episode" data-version="${v.version}" data-source="${v.source}" title="${escapeHtml(v.filename)}">`;
-                    html += `<span class="${sourceClass}">${v.source}</span> #${v.version}`;
-                    html += `<span class="version-tag">${new Date(v.uploadedAt).toLocaleDateString()}</span>`;
-                    html += `</span>`;
-                  });
-                  html += `</div>`;
+            if (Array.isArray(showData)) {
+              // No seasons
+              html += '<div class="no-season">';
+              showData.forEach(ep => {
+                const epNum = ep.episode;
+                html += '<div style="display:flex; flex-wrap:wrap; gap:4px; margin:2px 0;" data-episode="' + epNum + '">';
+                html += '<span style="font-weight:bold; margin-right:8px;">Ep ' + epNum + ':</span>';
+                ep.versions.sort((a,b) => a.version - b.version).forEach(v => {
+                  const sourceClass = v.source === 'kitsu' ? 'source-kitsu' : 'source-cloud';
+                  html += '<span class="episode" data-version="' + v.version + '" data-source="' + v.source + '" title="' + escapeHtml(v.filename) + '">';
+                  html += '<span class="' + sourceClass + '">' + v.source + '</span> #' + v.version;
+                  html += '<span class="version-tag">' + new Date(v.uploadedAt).toLocaleDateString() + '</span>';
+                  html += '</span>';
                 });
-                html += `</div>`;
-              } else {
-                // Has seasons
-                for (const [seasonName, episodes] of Object.entries(showData)) {
-                  const seasonNumber = seasonName.replace(/^season-/i, '');   // extract number from "season-1"
-                  html += `<div class="season" data-season="${escapeHtml(seasonNumber)}"><h3>${escapeHtml(seasonName.replace(/^season-/i,'Season '))}</h3>`;
-                  html += `<div class="episodes">`;
-                  episodes.forEach(ep => {
-                    const epNum = ep.episode;
-                    html += `<div style="display:flex; flex-wrap:wrap; gap:4px; margin:2px 0;" data-episode="${epNum}">`;
-                    html += `<span style="font-weight:bold; margin-right:8px;">Ep ${epNum}:</span>`;
-                    ep.versions.sort((a,b)=>a.version-b.version).forEach(v => {
-                      const sourceClass = v.source === 'kitsu' ? 'source-kitsu' : 'source-cloud';
-                      html += `<span class="episode" data-version="${v.version}" data-source="${v.source}" title="${escapeHtml(v.filename)}">`;
-                      html += `<span class="${sourceClass}">${v.source}</span> #${v.version}`;
-                      html += `<span class="version-tag">${new Date(v.uploadedAt).toLocaleDateString()}</span>`;
-                      html += `</span>`;
-                    });
-                    html += `</div>`;
+                html += '</div>';
+              });
+              html += '</div>';
+            } else {
+              // Has seasons
+              for (const [seasonName, episodes] of Object.entries(showData)) {
+                const seasonNumber = seasonName.replace(/^season-/i, '');
+                html += '<div class="season" data-season="' + escapeHtml(seasonNumber) + '"><h3>' + escapeHtml(seasonName.replace(/^season-/i,'Season ')) + '</h3>';
+                html += '<div class="episodes">';
+                episodes.forEach(ep => {
+                  const epNum = ep.episode;
+                  html += '<div style="display:flex; flex-wrap:wrap; gap:4px; margin:2px 0;" data-episode="' + epNum + '">';
+                  html += '<span style="font-weight:bold; margin-right:8px;">Ep ' + epNum + ':</span>';
+                  ep.versions.sort((a,b) => a.version - b.version).forEach(v => {
+                    const sourceClass = v.source === 'kitsu' ? 'source-kitsu' : 'source-cloud';
+                    html += '<span class="episode" data-version="' + v.version + '" data-source="' + v.source + '" title="' + escapeHtml(v.filename) + '">';
+                    html += '<span class="' + sourceClass + '">' + v.source + '</span> #' + v.version;
+                    html += '<span class="version-tag">' + new Date(v.uploadedAt).toLocaleDateString() + '</span>';
+                    html += '</span>';
                   });
-                  html += `</div></div>`;
-                }
+                  html += '</div>';
+                });
+                html += '</div></div>';
               }
-              html += `</div>`;
             }
-
-            html += `<div class="footer">✨ Found ${Object.keys(shows).length} shows in your cloud bucket.</div>`;
-            container.innerHTML = html;
+            html += '</div>';
           }
 
-          function escapeHtml(unsafe) {
-            return unsafe.replace(/[&<>"']/g, function(m) {
-              if (m === '&') return '&amp;';
-              if (m === '<') return '&lt;';
-              if (m === '>') return '&gt;';
-              if (m === '"') return '&quot;';
-              return '&#039;';
-            });
+          html += '<div class="footer">✨ Found ' + Object.keys(shows).length + ' shows in your cloud bucket.</div>';
+          container.innerHTML = html;
+        }
+
+        function escapeHtml(unsafe) {
+          return unsafe.replace(/[&<>"']/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            if (m === '"') return '&quot;';
+            return '&#039;';
+          });
+        }
+
+        // --- Context menu logic ---
+        const menu = document.getElementById('context-menu');
+
+        document.addEventListener('contextmenu', (e) => {
+          const target = e.target.closest('[data-show], [data-season], [data-episode], [data-version]');
+          if (!target) return;
+
+          e.preventDefault();
+
+          const showEl = target.closest('[data-show]');
+          const seasonEl = target.closest('[data-season]');
+          const episodeEl = target.closest('[data-episode]');
+          const versionEl = target.closest('[data-version]');
+
+          let type = 'show';
+          let show = showEl?.dataset.show;
+          let season = seasonEl?.dataset.season;
+          let episode = episodeEl?.dataset.episode;
+          let version = versionEl?.dataset.version;
+          let source = versionEl?.dataset.source;
+
+          if (version) {
+            type = 'version';
+          } else if (episode) {
+            type = 'episode';
+          } else if (season) {
+            type = 'season';
+          } else if (show) {
+            type = 'show';
           }
 
-          // --- Context menu logic ---
-          const menu = document.getElementById('context-menu');
+          currentContext = { type, show, season, episode, version, source };
 
-          document.addEventListener('contextmenu', (e) => {
-            // Find the closest element with a data attribute we care about
-            const target = e.target.closest('[data-show], [data-season], [data-episode], [data-version]');
-            if (!target) return;
+          let menuHtml = '';
+          if (type === 'version') {
+            menuHtml += '<button data-action="delete-version">Delete this version</button>';
+            menuHtml += '<button data-action="delete-episode">Delete all versions of episode ' + episode + '</button>';
+            menuHtml += '<hr>';
+            menuHtml += '<button data-action="delete-show">Delete entire show "' + show + '"</button>';
+          } else if (type === 'episode') {
+            menuHtml += '<button data-action="delete-episode">Delete all versions of episode ' + episode + '</button>';
+            menuHtml += '<hr>';
+            menuHtml += '<button data-action="delete-show">Delete entire show "' + show + '"</button>';
+          } else if (type === 'season') {
+            menuHtml += '<button data-action="delete-season">Delete entire season "' + season + '"</button>';
+            menuHtml += '<hr>';
+            menuHtml += '<button data-action="delete-show">Delete entire show "' + show + '"</button>';
+          } else if (type === 'show') {
+            menuHtml += '<button data-action="delete-show">Delete entire show "' + show + '"</button>';
+          }
+          menuHtml += '<hr><button data-action="cancel">Cancel</button>';
 
-            e.preventDefault();
+          menu.innerHTML = menuHtml;
+          menu.style.display = 'block';
+          menu.style.left = e.pageX + 'px';
+          menu.style.top = e.pageY + 'px';
+        });
 
-            // Build context object
-            const showEl = target.closest('[data-show]');
-            const seasonEl = target.closest('[data-season]');
-            const episodeEl = target.closest('[data-episode]');
-            const versionEl = target.closest('[data-version]');
-
-            let type = 'show';
-            let show = showEl?.dataset.show;
-            let season = seasonEl?.dataset.season;
-            let episode = episodeEl?.dataset.episode;
-            let version = versionEl?.dataset.version;
-            let source = versionEl?.dataset.source;
-
-            if (version) {
-              type = 'version';
-            } else if (episode) {
-              type = 'episode';
-            } else if (season) {
-              type = 'season';
-            } else if (show) {
-              type = 'show';
-            }
-
-            currentContext = { type, show, season, episode, version, source };
-
-            // Build menu HTML
-            let menuHtml = '';
-            if (type === 'version') {
-              menuHtml += `<button data-action="delete-version">Delete this version</button>`;
-              menuHtml += `<button data-action="delete-episode">Delete all versions of episode ${episode}</button>`;
-              menuHtml += `<hr>`;
-              menuHtml += `<button data-action="delete-show">Delete entire show "${show}"</button>`;
-            } else if (type === 'episode') {
-              menuHtml += `<button data-action="delete-episode">Delete all versions of episode ${episode}</button>`;
-              menuHtml += `<hr>`;
-              menuHtml += `<button data-action="delete-show">Delete entire show "${show}"</button>`;
-            } else if (type === 'season') {
-              menuHtml += `<button data-action="delete-season">Delete entire season "${season}"</button>`;
-              menuHtml += `<hr>`;
-              menuHtml += `<button data-action="delete-show">Delete entire show "${show}"</button>`;
-            } else if (type === 'show') {
-              menuHtml += `<button data-action="delete-show">Delete entire show "${show}"</button>`;
-            }
-            menuHtml += `<hr><button data-action="cancel">Cancel</button>`;
-
-            menu.innerHTML = menuHtml;
-            menu.style.display = 'block';
-            menu.style.left = e.pageX + 'px';
-            menu.style.top = e.pageY + 'px';
-          });
-
-          document.addEventListener('click', (e) => {
-            // Hide menu if clicking outside
-            if (!menu.contains(e.target)) {
-              menu.style.display = 'none';
-            }
-          });
-
-          menu.addEventListener('click', async (e) => {
-            const action = e.target.dataset.action;
-            if (!action || action === 'cancel') {
-              menu.style.display = 'none';
-              return;
-            }
-
-            if (!currentContext) return;
-
-            const { show, season, episode, version, source } = currentContext;
-            let url = '';
-            let confirmMsg = '';
-
-            if (action === 'delete-show') {
-              url = `/shows/${encodeURIComponent(show)}`;
-              confirmMsg = `Delete entire show "${show}"?`;
-            } else if (action === 'delete-season') {
-              url = `/shows/${encodeURIComponent(show)}/${encodeURIComponent(season)}`;
-              confirmMsg = `Delete all subtitles in season "${season}" of "${show}"?`;
-            } else if (action === 'delete-episode') {
-              if (season) {
-                url = `/shows/${encodeURIComponent(show)}/${encodeURIComponent(season)}/episode/${episode}`;
-              } else {
-                url = `/shows/${encodeURIComponent(show)}/episode/${episode}`;
-              }
-              confirmMsg = `Delete all versions of episode ${episode} of "${show}"?`;
-            } else if (action === 'delete-version') {
-              if (season) {
-                url = `/shows/${encodeURIComponent(show)}/${encodeURIComponent(season)}/episode/${episode}/version/${version}`;
-              } else {
-                url = `/shows/${encodeURIComponent(show)}/episode/${episode}/version/${version}`;
-              }
-              confirmMsg = `Delete ${source} v${version} of episode ${episode}?`;
-            }
-
-            if (!url || !confirm(confirmMsg)) {
-              menu.style.display = 'none';
-              return;
-            }
-
+        document.addEventListener('click', (e) => {
+          if (!menu.contains(e.target)) {
             menu.style.display = 'none';
+          }
+        });
 
-            const response = await fetchWithKey(url, { method: 'DELETE' });
-            if (!response) return;
-            if (response.ok) {
-              alert('Deleted successfully.');
-              loadCatalog(); // refresh
+        menu.addEventListener('click', async (e) => {
+          const action = e.target.dataset.action;
+          if (!action || action === 'cancel') {
+            menu.style.display = 'none';
+            return;
+          }
+
+          if (!currentContext) return;
+
+          const { show, season, episode, version, source } = currentContext;
+          let url = '';
+          let confirmMsg = '';
+
+          if (action === 'delete-show') {
+            url = '/shows/' + encodeURIComponent(show);
+            confirmMsg = 'Delete entire show "' + show + '"?';
+          } else if (action === 'delete-season') {
+            url = '/shows/' + encodeURIComponent(show) + '/' + encodeURIComponent(season);
+            confirmMsg = 'Delete all subtitles in season "' + season + '" of "' + show + '"?';
+          } else if (action === 'delete-episode') {
+            if (season) {
+              url = '/shows/' + encodeURIComponent(show) + '/' + encodeURIComponent(season) + '/episode/' + episode;
             } else {
-              const err = await response.json();
-              alert(`Error: ${err.error}`);
+              url = '/shows/' + encodeURIComponent(show) + '/episode/' + episode;
             }
-          });
-
-          // Clear all button
-          document.getElementById('clearAllBtn').addEventListener('click', async () => {
-            if (!confirm('⚠️ This will delete ALL subtitles from the catalog. Are you sure?')) return;
-            const response = await fetchWithKey('/clear-all', { method: 'DELETE' });
-            if (!response) return;
-            if (response.ok) {
-              alert('All subtitles cleared.');
-              loadCatalog();
+            confirmMsg = 'Delete all versions of episode ' + episode + ' of "' + show + '"?';
+          } else if (action === 'delete-version') {
+            if (season) {
+              url = '/shows/' + encodeURIComponent(show) + '/' + encodeURIComponent(season) + '/episode/' + episode + '/version/' + version;
             } else {
-              const err = await response.json();
-              alert(`Error: ${err.error}`);
+              url = '/shows/' + encodeURIComponent(show) + '/episode/' + episode + '/version/' + version;
             }
-          });
+            confirmMsg = 'Delete ' + source + ' v' + version + ' of episode ' + episode + '?';
+          }
 
-          // Initial load
-          loadCatalog();
-        </script>
-      </body>
-      </html>
+          if (!url || !confirm(confirmMsg)) {
+            menu.style.display = 'none';
+            return;
+          }
+
+          menu.style.display = 'none';
+
+          const response = await fetchWithKey(url, { method: 'DELETE' });
+          if (!response) return;
+          if (response.ok) {
+            alert('Deleted successfully.');
+            loadCatalog();
+          } else {
+            const err = await response.json();
+            alert('Error: ' + err.error);
+          }
+        });
+
+        document.getElementById('clearAllBtn').addEventListener('click', async () => {
+          if (!confirm('⚠️ This will delete ALL subtitles from the catalog. Are you sure?')) return;
+          const response = await fetchWithKey('/clear-all', { method: 'DELETE' });
+          if (!response) return;
+          if (response.ok) {
+            alert('All subtitles cleared.');
+            loadCatalog();
+          } else {
+            const err = await response.json();
+            alert('Error: ' + err.error);
+          }
+        });
+
+        loadCatalog();
+      </script>
+    </body>
+    </html>
     `);
     return;
   }
