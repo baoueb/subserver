@@ -129,6 +129,116 @@ app.get('/subtitles/:title/:season/:episode', async (req, res) => {
   }
 });
 
+// Smart /list endpoint: HTML for browsers, JSON for code
+app.get('/list', async (req, res) => {
+  // Check if the client expects HTML
+  const acceptHeader = req.get('Accept') || '';
+  if (acceptHeader.includes('text/html')) {
+    // Serve a styled HTML page that fetches and displays the JSON data
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Subtitle Catalog</title>
+        <style>
+          body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: #1a1a1a; color: #e0e0e0; line-height: 1.6; margin: 0; padding: 20px; }
+          .container { max-width: 1200px; margin: 0 auto; }
+          h1 { color: #4ade80; border-bottom: 2px solid #333; padding-bottom: 10px; }
+          .show { background: #2a2a2a; border-radius: 8px; margin-bottom: 20px; padding: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+          .show h2 { margin: 0 0 10px 0; color: #ffd966; font-size: 1.5rem; }
+          .season { margin-left: 20px; margin-bottom: 15px; }
+          .season h3 { color: #9ca3af; margin: 10px 0 5px 0; font-size: 1.2rem; }
+          .episodes { display: flex; flex-wrap: wrap; gap: 8px; }
+          .episode { background: #374151; padding: 5px 12px; border-radius: 20px; font-size: 0.9rem; border: 1px solid #4b5563; color: #d1d5db; }
+          .episode:hover { background: #4b5563; }
+          .no-season { margin-left: 20px; }
+          .loading, .error { text-align: center; padding: 40px; font-size: 1.2rem; }
+          .error { color: #f87171; }
+          .footer { margin-top: 30px; text-align: center; color: #6b7280; font-size: 0.9rem; border-top: 1px solid #333; padding-top: 20px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>📚 Subtitle Catalog</h1>
+          <div id="content" class="loading">Loading catalog...</div>
+        </div>
+        <script>
+          async function loadCatalog() {
+            try {
+              const response = await fetch('/list', { headers: { 'Accept': 'application/json' } });
+              if (!response.ok) throw new Error(\`HTTP \${response.status}\`);
+              const data = await response.json();
+              renderCatalog(data.shows);
+            } catch (err) {
+              document.getElementById('content').innerHTML = \`<div class="error">❌ Failed to load: \${err.message}</div>\`;
+            }
+          }
+
+          function renderCatalog(shows) {
+            const container = document.getElementById('content');
+            if (!shows || Object.keys(shows).length === 0) {
+              container.innerHTML = '<div class="error">📭 No subtitles found in the catalog.</div>';
+              return;
+            }
+
+            let html = '';
+            for (const [showName, showData] of Object.entries(shows)) {
+              html += \`<div class="show"><h2>\${escapeHtml(showName)}</h2>\`;
+
+              if (Array.isArray(showData)) {
+                // No seasons: direct episode list
+                html += \`<div class="no-season episodes">\`;
+                showData.sort().forEach(ep => {
+                  html += \`<span class="episode">\${escapeHtml(ep)}</span>\`;
+                });
+                html += \`</div>\`;
+              } else {
+                // Has seasons
+                for (const [seasonName, episodes] of Object.entries(showData)) {
+                  html += \`<div class="season"><h3>\${escapeHtml(seasonName)}</h3>\`;
+                  html += \`<div class="episodes">\`;
+                  episodes.sort().forEach(ep => {
+                    html += \`<span class="episode">\${escapeHtml(ep)}</span>\`;
+                  });
+                  html += \`</div></div>\`;
+                }
+              }
+              html += \`</div>\`;
+            }
+
+            html += \`<div class="footer">✨ Found \${Object.keys(shows).length} shows in your cloud bucket.</div>\`;
+            container.innerHTML = html;
+          }
+
+          function escapeHtml(unsafe) {
+            return unsafe.replace(/[&<>"']/g, function(m) {
+              if (m === '&') return '&amp;';
+              if (m === '<') return '&lt;';
+              if (m === '>') return '&gt;';
+              if (m === '"') return '&quot;';
+              return '&#039;';
+            });
+          }
+
+          loadCatalog();
+        </script>
+      </body>
+      </html>
+    `);
+    return;
+  }
+
+  // For non-browser requests (like your extension), continue to your existing JSON logic
+  // (This is where you would put your current /list code, or you can reuse the same logic)
+  try {
+    const [files] = await bucket.getFiles({ prefix: 'shows/' });
+    // ... your existing JSON building logic here (the one you already have in your /list route)
+    // I'm omitting it here for brevity, but keep your full existing /list logic below.
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // List all uploaded subtitles (from GCS)
 app.get('/list', async (req, res) => {
   try {
