@@ -751,4 +751,51 @@ app.get('/list', async (req, res) => {
   }
 });
 
+  // ─────────────────────────────────────────────────────────────
+// Wordlist backup endpoints (JSON)
+// ─────────────────────────────────────────────────────────────
+
+// Upload/overwrite the global wordlist
+app.put('/wordlist.json', requireApiKey, async (req, res) => {
+  try {
+    const data = req.body;
+    if (!data || typeof data !== 'object') {
+      return res.status(400).json({ error: 'Invalid or missing JSON data' });
+    }
+
+    const blob = bucket.file('wordlist.json');
+    await blob.save(JSON.stringify(data), {
+      contentType: 'application/json',
+      public: false,                // keep private; access only via API key
+      metadata: {
+        uploadedAt: new Date().toISOString(),
+      },
+    });
+
+    res.json({ success: true, message: 'Wordlist saved' });
+  } catch (err) {
+    console.error('[PUT /wordlist.json]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Retrieve the stored wordlist
+app.get('/wordlist.json', requireApiKey, async (req, res) => {
+  try {
+    const blob = bucket.file('wordlist.json');
+    const [exists] = await blob.exists();
+    if (!exists) {
+      return res.status(404).json({ error: 'Wordlist not found' });
+    }
+
+    const [data] = await blob.download();
+    res.setHeader('Content-Type', 'application/json');
+    res.send(data);
+  } catch (err) {
+    console.error('[GET /wordlist.json]', err);
+    res.status(500).json({ error: err.message });
+  }
+
+});
+
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
