@@ -373,6 +373,48 @@ app.get('/versions/:title/:season/:episode', async (req, res) => {
   }
 });
 
+// HEAD: check if any version exists for a given title and episode (no season)
+app.head('/subtitles/:title/:episode', async (req, res) => {
+  const { title, episode } = req.params;
+  const safeTitle = sanitise(title);
+  const ep = parseInt(episode, 10);
+  if (isNaN(ep)) return res.sendStatus(400);
+
+  const prefix = `shows/${safeTitle}/${ep}_v`; // matches all versions for this episode
+  try {
+    const [files] = await bucket.getFiles({ prefix, maxResults: 1 }); // we only need one
+    if (files.length > 0) {
+      res.sendStatus(200);
+    } else {
+      res.sendStatus(404);
+    }
+  } catch (err) {
+    console.error('HEAD /subtitles/:title/:episode error:', err);
+    res.sendStatus(500);
+  }
+});
+// HEAD: check if any version exists for a given title, season, and episode
+app.head('/subtitles/:title/:season/:episode', async (req, res) => {
+  const { title, season, episode } = req.params;
+  const safeTitle = sanitise(title);
+  const safeSeason = `season-${sanitise(season)}`;
+  const ep = parseInt(episode, 10);
+  if (isNaN(ep)) return res.sendStatus(400);
+
+  const prefix = `shows/${safeTitle}/${safeSeason}/${ep}_v`; // all versions for this episode in that season
+  try {
+    const [files] = await bucket.getFiles({ prefix, maxResults: 1 });
+    if (files.length > 0) {
+      res.sendStatus(200);
+    } else {
+      res.sendStatus(404);
+    }
+  } catch (err) {
+    console.error('HEAD /subtitles/:title/:season/:episode error:', err);
+    res.sendStatus(500);
+  }
+});
+
 // List endpoint with full version info
 app.get('/list', async (req, res) => {
   const acceptHeader = req.get('Accept') || '';
@@ -405,6 +447,42 @@ app.get('/list', async (req, res) => {
         .loading, .error { text-align: center; padding: 40px; font-size: 1.2rem; }
         .error { color: #f87171; }
         .footer { margin-top: 30px; text-align: center; color: #6b7280; font-size: 0.9rem; border-top: 1px solid #333; padding-top: 20px; }
+        .episodes-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 8px;
+        }
+        .episode-block {
+            background: #1e1e1e;
+            border-radius: 8px;
+            padding: 8px;
+            min-width: 180px;
+            flex: 1 0 auto;
+        }
+        .episode-block .episode-title {
+            font-weight: bold;
+            color: #ffd966;
+            margin-bottom: 6px;
+        }
+        .version-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+        .version-btn {
+            background: #374151;
+            border: 1px solid #4b5563;
+            border-radius: 20px;
+            padding: 4px 10px;
+            color: #d1d5db;
+            font-size: 0.8rem;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .version-btn:hover {
+            background: #4b5563;
+        }
 
         /* Context menu */
         #context-menu {
@@ -481,7 +559,9 @@ app.get('/list', async (req, res) => {
             const response = await fetch('/list', { headers: { 'Accept': 'application/json' } });
             if (!response.ok) throw new Error('HTTP ' + response.status);
             const data = await response.json();
+            window.catalogShows = data.shows; // store for pagination
             renderCatalog(data.shows);
+            attachPaginationHandlers();
           } catch (err) {
             document.getElementById('content').innerHTML = '<div class="error">❌ Failed to load: ' + err.message + '</div>';
           }
@@ -496,45 +576,19 @@ app.get('/list', async (req, res) => {
 
           let html = '';
           for (const [showName, showData] of Object.entries(shows)) {
-            html += '<div class="show" data-show="' + escapeHtml(showName) + '"><h2>' + escapeHtml(showName) + '</h2>';
+            html += `<div class="show" data-show="${escapeHtml(showName)}"><h2>${escapeHtml(showName)}</h2>`;
 
             if (Array.isArray(showData)) {
               // No seasons
-              html += '<div class="no-season">';
-              showData.forEach(ep => {
-                const epNum = ep.episode;
-                html += '<div style="display:flex; flex-wrap:wrap; gap:4px; margin:2px 0;" data-episode="' + epNum + '">';
-                html += '<span style="font-weight:bold; margin-right:8px;">Ep ' + epNum + ':</span>';
-                ep.versions.sort((a,b) => a.version - b.version).forEach(v => {
-                  const sourceClass = v.source === 'kitsu' ? 'source-kitsu' : 'source-cloud';
-                  html += '<span class="episode" data-version="' + v.version + '" data-source="' + v.source + '" title="' + escapeHtml(v.filename) + '">';
-                  html += '<span class="' + sourceClass + '">' + v.source + '</span> #' + v.version;
-                  html += '<span class="version-tag">' + new Date(v.uploadedAt).toLocaleDateString() + '</span>';
-                  html += '</span>';
-                });
-                html += '</div>';
-              });
-              html += '</div>';
+              html += renderEpisodesHtml(showName, null, showData);
             } else {
               // Has seasons
-              for (const [seasonName, episodes] of Object.entries(showData)) {
-                const seasonNumber = seasonName.replace(/^season-/i, '');
-                html += '<div class="season" data-season="' + escapeHtml(seasonNumber) + '"><h3>' + escapeHtml(seasonName.replace(/^season-/i,'Season ')) + '</h3>';
-                html += '<div class="episodes">';
-                episodes.forEach(ep => {
-                  const epNum = ep.episode;
-                  html += '<div style="display:flex; flex-wrap:wrap; gap:4px; margin:2px 0;" data-episode="' + epNum + '">';
-                  html += '<span style="font-weight:bold; margin-right:8px;">Ep ' + epNum + ':</span>';
-                  ep.versions.sort((a,b) => a.version - b.version).forEach(v => {
-                    const sourceClass = v.source === 'kitsu' ? 'source-kitsu' : 'source-cloud';
-                    html += '<span class="episode" data-version="' + v.version + '" data-source="' + v.source + '" title="' + escapeHtml(v.filename) + '">';
-                    html += '<span class="' + sourceClass + '">' + v.source + '</span> #' + v.version;
-                    html += '<span class="version-tag">' + new Date(v.uploadedAt).toLocaleDateString() + '</span>';
-                    html += '</span>';
-                  });
-                  html += '</div>';
-                });
-                html += '</div></div>';
+              for (const [seasonKey, episodes] of Object.entries(showData)) {
+                const seasonNumber = seasonKey.replace(/^season-/i, '');
+                html += `<div class="season" data-season="${escapeHtml(seasonNumber)}">`;
+                html += `<h3>${escapeHtml(seasonKey.replace(/^season-/i,'Season '))}</h3>`;
+                html += renderEpisodesHtml(showName, seasonKey, episodes);
+                html += '</div>';
               }
             }
             html += '</div>';
@@ -542,6 +596,128 @@ app.get('/list', async (req, res) => {
 
           html += '<div class="footer">✨ Found ' + Object.keys(shows).length + ' shows in your cloud bucket.</div>';
           container.innerHTML = html;
+        }
+
+        function renderEpisodesHtml(showName, seasonKey, episodes) {
+          // Sort numerically
+          const sorted = episodes.slice().sort((a,b) => a.episode - b.episode);
+          const total = sorted.length;
+          const pageSize = 100;
+          const pages = Math.ceil(total / pageSize);
+
+          let output = '<div class="episodes-container">';
+
+          if (pages > 1) {
+            output += `
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                    <span style="color:#aaa;">Episodes:</span>
+                    <select class="episode-page-select" data-show="${escapeHtml(showName)}" data-season="${escapeHtml(seasonKey || '')}" style="background:#1e1e1e; color:#fff; border:1px solid #4b5563; border-radius:4px; padding:4px 8px;">
+            `;
+            for (let i = 0; i < pages; i++) {
+              const start = i * pageSize + 1;
+              const end = Math.min((i + 1) * pageSize, total);
+              output += `<option value="${i}">${start}–${end}</option>`;
+            }
+            output += '</select></div>';
+          }
+
+          // Render first page
+          const firstPageEpisodes = sorted.slice(0, pageSize);
+          output += '<div class="episodes-grid">';
+          firstPageEpisodes.forEach(ep => {
+            if (!ep || !Array.isArray(ep.versions)) return;
+            const epNum = ep.episode;
+            const versions = ep.versions.sort((a,b) => a.version - b.version);
+            output += `
+                <div class="episode-block" data-episode="${epNum}">
+                    <div class="episode-title">Ep ${epNum}</div>
+                    <div class="version-row">
+            `;
+            versions.forEach(v => {
+              const sourceClass = v.source === 'kitsu' ? 'source-kitsu' : 'source-cloud';
+              output += `
+                    <button class="version-btn ${sourceClass}" data-version="${v.version}" data-source="${v.source}" title="${escapeHtml(v.filename)}" data-show="${escapeHtml(showName)}" data-season="${escapeHtml(seasonKey || '')}" data-episode="${epNum}">
+                        ${v.source} #${v.version}
+                    </button>
+              `;
+            });
+            output += '</div></div>';
+          });
+          output += '</div></div>';
+
+          return output;
+        }
+
+        function attachPaginationHandlers() {
+          document.querySelectorAll('.episode-page-select').forEach(select => {
+            select.addEventListener('change', function() {
+              const show = this.dataset.show;
+              const season = this.dataset.season;
+              const page = parseInt(this.value, 10);
+              const pageSize = 100;
+
+              // Find the container that holds the episodes for this show/season
+              const parentShow = this.closest('.show');
+              const seasonDiv = this.closest('.season');
+              let container = parentShow;
+              if (seasonDiv) container = seasonDiv;
+              const episodesContainer = container.querySelector('.episodes-container');
+              if (!episodesContainer) return;
+
+              // Get the full episodes data from global store
+              const showData = window.catalogShows[show];
+              if (!showData) return;
+              let episodes;
+              if (season) {
+                // Season key in storage is like "season-9", but we have the raw season number in data-season attribute
+                const seasonKey = `season-${season}`;
+                episodes = showData[seasonKey];
+              } else {
+                episodes = showData; // array
+              }
+              if (!episodes || !Array.isArray(episodes)) return;
+
+              // Sort numerically
+              const sorted = episodes.slice().sort((a,b) => a.episode - b.episode);
+              const start = page * pageSize;
+              const end = Math.min(start + pageSize, sorted.length);
+              const pageEpisodes = sorted.slice(start, end);
+
+              // Generate new grid HTML for this page
+              let gridHtml = '<div class="episodes-grid">';
+              pageEpisodes.forEach(ep => {
+                if (!ep || !Array.isArray(ep.versions)) return;
+                const epNum = ep.episode;
+                const versions = ep.versions.sort((a,b) => a.version - b.version);
+                gridHtml += `
+                    <div class="episode-block" data-episode="${epNum}">
+                        <div class="episode-title">Ep ${epNum}</div>
+                        <div class="version-row">
+                `;
+                versions.forEach(v => {
+                  const sourceClass = v.source === 'kitsu' ? 'source-kitsu' : 'source-cloud';
+                  gridHtml += `
+                        <button class="version-btn ${sourceClass}" data-version="${v.version}" data-source="${v.source}" title="${escapeHtml(v.filename)}" data-show="${escapeHtml(show)}" data-season="${escapeHtml(season || '')}" data-episode="${epNum}">
+                            ${v.source} #${v.version}
+                        </button>
+                  `;
+                });
+                gridHtml += '</div></div>';
+              });
+              gridHtml += '</div>';
+
+              // Replace the old grid with the new one
+              const oldGrid = episodesContainer.querySelector('.episodes-grid');
+              if (oldGrid) {
+                const newGrid = document.createElement('div');
+                newGrid.innerHTML = gridHtml;
+                oldGrid.parentNode.replaceChild(newGrid.firstChild, oldGrid);
+              } else {
+                // fallback
+                episodesContainer.insertAdjacentHTML('beforeend', gridHtml);
+              }
+            });
+          });
         }
 
         function escapeHtml(unsafe) {
@@ -554,7 +730,7 @@ app.get('/list', async (req, res) => {
           });
         }
 
-        // --- Context menu logic ---
+        // --- Context menu logic (unchanged) ---
         const menu = document.getElementById('context-menu');
 
         document.addEventListener('contextmenu', (e) => {
@@ -664,7 +840,7 @@ app.get('/list', async (req, res) => {
           if (!response) return;
           if (response.ok) {
             alert('Deleted successfully.');
-            loadCatalog();
+            loadCatalog(); // reload the catalog
           } else {
             const err = await response.json();
             alert('Error: ' + err.error);
