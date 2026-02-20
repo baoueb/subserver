@@ -71,21 +71,26 @@ async def search_subtitles(req: SearchRequest):
                 # Compute score (0-1)
                 matches = sub.get_matches(video)
                 score = sum(1 for m in matches) / len(subliminal.scores[video.__class__.__name__])
-            except Exception as e:
-                logger.warning(f"Could not compute score for subtitle {sub}: {e}")
-                score = 0.0  # fallback
 
-            item_id = f"{sub.provider_name}:{sub.id}"
-            results.append(SubtitleItem(
-                id=item_id,
-                provider=sub.provider_name,
-                language=str(sub.language),
-                release=sub.release_info or "",
-                score=score,
-                filename=getattr(sub, "filename", None)
-            ))
-            # Cache the subtitle object for later download
-            subtitle_cache[item_id] = (sub, now + CACHE_TTL)
+                # Safely get release_info and filename
+                release = getattr(sub, 'release_info', '') or ''
+                filename = getattr(sub, 'filename', None)
+
+                item_id = f"{sub.provider_name}:{sub.id}"
+                results.append(SubtitleItem(
+                    id=item_id,
+                    provider=sub.provider_name,
+                    language=str(sub.language),
+                    release=release,
+                    score=score,
+                    filename=filename
+                ))
+                # Cache the subtitle object for later download
+                subtitle_cache[item_id] = (sub, now + CACHE_TTL)
+            except Exception as e:
+                # Log and skip this subtitle so a single bad one doesn't break the response
+                logger.warning(f"Skipping subtitle {sub.id} from {sub.provider_name}: {e}", exc_info=True)
+                continue
 
         return results
     except HTTPException:
