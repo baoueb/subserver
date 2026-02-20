@@ -45,7 +45,17 @@ async def search_subtitles(req: SearchRequest):
         else:
             video = subliminal.Movie.fromname(req.title)
 
-        languages = {Language(l) for l in req.languages}
+        # Convert language codes using fromietf (accepts both 'en' and 'eng')
+        languages = set()
+        for l in req.languages:
+            try:
+                languages.add(Language.fromietf(l))
+            except Exception as e:
+                logger.warning(f"Invalid language code '{l}': {e}")
+        if not languages:
+            # Fallback to English
+            languages.add(Language.fromietf('en'))
+            logger.info("No valid languages provided, falling back to English")
 
         # List subtitles from all providers
         try:
@@ -77,7 +87,6 @@ async def search_subtitles(req: SearchRequest):
             # Cache the subtitle object for later download
             subtitle_cache[item_id] = (sub, now + CACHE_TTL)
 
-        # (Optional: clean expired cache entries – not implemented for simplicity)
         return results
     except HTTPException:
         # Re-raise HTTP exceptions as they are already handled
