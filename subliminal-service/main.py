@@ -38,42 +38,53 @@ async def ping():
 
 @app.post("/subliminal/search", response_model=List[SubtitleItem])
 async def search_subtitles(req: SearchRequest):
-    # Build video object
-    if req.season is not None and req.episode is not None:
-        video = subliminal.Episode.fromname(f"{req.title} S{req.season:02d}E{req.episode:02d}")
-    else:
-        video = subliminal.Movie.fromname(req.title)
-
-    languages = {Language(l) for l in req.languages}
-
-    # List subtitles from all providers
     try:
-        subtitles = subliminal.list_subtitles([video], languages)[video]
+        # Build video object
+        if req.season is not None and req.episode is not None:
+            video = subliminal.Episode.fromname(f"{req.title} S{req.season:02d}E{req.episode:02d}")
+        else:
+            video = subliminal.Movie.fromname(req.title)
+
+        languages = {Language(l) for l in req.languages}
+
+        # List subtitles from all providers
+        try:
+            subtitles = subliminal.list_subtitles([video], languages)[video]
+        except Exception as e:
+            logger.error(f"Error listing subtitles: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Subtitle listing failed: {str(e)}")
+
+        results = []
+        now = time.time()
+        for sub in subtitles:
+            try:
+                # Compute score (0-1)
+                matches = sub.get_matches(video)
+                score = sum(1 for m in matches) / len(subliminal.scores[video.__class__.__name__])
+            except Exception as e:
+                logger.warning(f"Could not compute score for subtitle {sub}: {e}")
+                score = 0.0  # fallback
+
+            item_id = f"{sub.provider_name}:{sub.id}"
+            results.append(SubtitleItem(
+                id=item_id,
+                provider=sub.provider_name,
+                language=str(sub.language),
+                release=sub.release_info or "",
+                score=score,
+                filename=getattr(sub, "filename", None)
+            ))
+            # Cache the subtitle object for later download
+            subtitle_cache[item_id] = (sub, now + CACHE_TTL)
+
+        # (Optional: clean expired cache entries – not implemented for simplicity)
+        return results
+    except HTTPException:
+        # Re-raise HTTP exceptions as they are already handled
+        raise
     except Exception as e:
-        logger.error(f"Error listing subtitles: {e}")
-        raise HTTPException(status_code=500, detail="Subtitle listing failed")
-
-    results = []
-    now = time.time()
-    for sub in subtitles:
-        # Compute score (0-1)
-        matches = sub.get_matches(video)
-        score = sum(1 for m in matches) / len(subliminal.scores[video.__class__.__name__])
-        item_id = f"{sub.provider_name}:{sub.id}"
-        results.append(SubtitleItem(
-            id=item_id,
-            provider=sub.provider_name,
-            language=str(sub.language),
-            release=sub.release_info or "",
-            score=score,
-            filename=getattr(sub, "filename", None)
-        ))
-        # Cache the subtitle object for later download
-        subtitle_cache[item_id] = (sub, now + CACHE_TTL)
-
-    # Clean expired cache entries (optional, but keep it simple)
-    # In a production service you'd want a background cleanup task.
-    return results
+        logger.error(f"Unexpected error in search_subtitles: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @app.get("/subliminal/download/{subtitle_id}")
 async def download_subtitle(subtitle_id: str):
@@ -93,5 +104,5 @@ async def download_subtitle(subtitle_id: str):
         content = subtitle.get_content()
         return content
     except Exception as e:
-        logger.error(f"Error downloading subtitle {subtitle_id}: {e}")
-        raise HTTPException(status_code=500, detail="Download failed")
+        logger.error(f"Error downloading subtitle {subtitle_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Download failed: {str(e)}")
