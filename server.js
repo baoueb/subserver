@@ -451,8 +451,9 @@ app.get('/list', async (req, res) => {
         const btn = e.target.closest('.delete-show-btn');
         if (!btn) return;
         const show = btn.dataset.show;
-        if (!confirm(\`Delete entire show "${show}"?\`)) return;
-        const response = await fetchWithKey(\`/shows/${encodeURIComponent(show)}\`, { method: 'DELETE' });
+
+        if (!confirm(\`Delete entire show "\${show}"?\`)) return;
+        const response = await fetchWithKey(\`/shows/\${encodeURIComponent(show)}\`, { method: 'DELETE' });
         if (response && response.ok) {
           alert('Show deleted.');
           loadCatalog();
