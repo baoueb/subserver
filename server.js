@@ -446,7 +446,21 @@ app.get('/list', async (req, res) => {
         }
         return response;
       }
-
+      // Delete show button handler
+      document.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.delete-show-btn');
+        if (!btn) return;
+        const show = btn.dataset.show;
+        if (!confirm(`Delete entire show "${show}"?`)) return;
+        const response = await fetchWithKey(`/shows/${encodeURIComponent(show)}`, { method: 'DELETE' });
+        if (response && response.ok) {
+          alert('Show deleted.');
+          loadCatalog();
+        } else if (response) {
+          const err = await response.json();
+          alert('Error: ' + err.error);
+        }
+      });
       async function loadCatalog() {
         try {
           const response = await fetch('/list', { headers: { 'Accept': 'application/json' } });
@@ -469,8 +483,7 @@ app.get('/list', async (req, res) => {
 
         let html = '';
         for (const [showName, showData] of Object.entries(shows)) {
-          html += \`<div class=\"show\" data-show=\"\${escapeHtml(showName)}\"><h2>\${escapeHtml(showName)}</h2>\`;
-
+html += `<div class=\"show\" data-show=\"\${escapeHtml(showName)}\"><h2>\${escapeHtml(showName)}<button class=\"delete-show-btn\" data-show=\"\${escapeHtml(showName)}\" title=\"Delete this show\">🗑️</button></h2>`;
           if (Array.isArray(showData)) {
             // No seasons
             html += renderEpisodesHtml(showName, null, showData);
@@ -806,6 +819,21 @@ app.get('/list', async (req, res) => {
           .loading, .error { text-align: center; padding: 40px; font-size: 1.2rem; }
           .error { color: #f87171; }
           .footer { margin-top: 30px; text-align: center; color: #6b7280; font-size: 0.9rem; border-top: 1px solid #333; padding-top: 20px; }
+          .show h2 {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.delete-show-btn {
+    background: none;
+    border: none;
+    color: #ef4444;
+    font-size: 1.2rem;
+    cursor: pointer;
+}
+.delete-show-btn:hover {
+    color: #dc2626;
+}
           /* Context menu */
           #context-menu {
             position: fixed;
@@ -837,6 +865,7 @@ app.get('/list', async (req, res) => {
             border: none;
             border-top: 1px solid #4b5563;
           }
+
         </style>
       </head>
       <body>
