@@ -451,8 +451,8 @@ app.get('/list', async (req, res) => {
         const btn = e.target.closest('.delete-show-btn');
         if (!btn) return;
         const show = btn.dataset.show;
-        if (!confirm(`Delete entire show "${show}"?`)) return;
-        const response = await fetchWithKey(`/shows/${encodeURIComponent(show)}`, { method: 'DELETE' });
+        if (!confirm(\`Delete entire show "${show}"?\`)) return;
+        const response = await fetchWithKey(\`/shows/${encodeURIComponent(show)}\`, { method: 'DELETE' });
         if (response && response.ok) {
           alert('Show deleted.');
           loadCatalog();
@@ -483,7 +483,7 @@ app.get('/list', async (req, res) => {
 
         let html = '';
         for (const [showName, showData] of Object.entries(shows)) {
-          html += \`<div class=\"show\" data-show=\"\${escapeHtml(showName)}\"><h2>\${escapeHtml(showName)}<button class=\"delete-show-btn\" data-show=\"\${escapeHtml(showName)}\" title=\"Delete this show\">🗑️</button></h2>`;
+          html += \`<div class=\"show\" data-show=\"\${escapeHtml(showName)}\"><h2>\${escapeHtml(showName)}<button class=\"delete-show-btn\" data-show=\"\${escapeHtml(showName)}\" title=\"Delete this show\">🗑️</button></h2>\`;
           if (Array.isArray(showData)) {
             // No seasons
             html += renderEpisodesHtml(showName, null, showData);
