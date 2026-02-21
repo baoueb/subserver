@@ -6,6 +6,12 @@ from babelfish import Language
 import time
 import logging
 
+# Import scores for normalisation (may not exist in all versions)
+try:
+    from subliminal.score import scores
+except ImportError:
+    scores = None
+
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -68,9 +74,18 @@ async def search_subtitles(req: SearchRequest):
         now = time.time()
         for sub in subtitles:
             try:
-                # Compute score (0-1)
-                matches = sub.get_matches(video)
-                score = sum(1 for m in matches) / len(subliminal.scores[video.__class__.__name__])
+                # Compute score using the library's built‑in function
+                raw_score = subliminal.compute_score(sub, video)
+
+                # Normalise to 0‑1 if possible
+                if scores and video.__class__.__name__ in scores:
+                    max_score = scores[video.__class__.__name__]
+                    norm_score = raw_score / max_score if max_score else 0.0
+                else:
+                    # Fallback: ratio of matched attributes
+                    matches = sub.get_matches(video)
+                    possible = len(subliminal.scores[video.__class__.__name__]) if hasattr(subliminal, 'scores') else 1
+                    norm_score = len(matches) / possible if possible else 0.0
 
                 # Safely get release_info and filename
                 release = getattr(sub, 'release_info', '') or ''
@@ -82,7 +97,7 @@ async def search_subtitles(req: SearchRequest):
                     provider=sub.provider_name,
                     language=str(sub.language),
                     release=release,
-                    score=score,
+                    score=norm_score,
                     filename=filename
                 ))
                 # Cache the subtitle object for later download
