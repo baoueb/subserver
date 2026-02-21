@@ -6,6 +6,9 @@ from babelfish import Language
 import time
 import logging
 
+# Import the download function
+from subliminal import download_subtitles
+
 # Import scores for normalisation (may not exist in all versions)
 try:
     from subliminal.score import scores
@@ -120,17 +123,25 @@ async def download_subtitle(subtitle_id: str):
     # Check cache
     cached = subtitle_cache.get(subtitle_id)
     if cached is None:
-        # Not in cache – could try to re‑fetch, but for simplicity we return 404
         raise HTTPException(status_code=404, detail="Subtitle not found in cache (try searching again)")
     subtitle, expiry = cached
     if time.time() > expiry:
-        # Expired
         del subtitle_cache[subtitle_id]
         raise HTTPException(status_code=404, detail="Cached subtitle expired (try searching again)")
 
     try:
-        # Download the subtitle content
-        content = subtitle.get_content()
+        # Use the official download function to fetch the subtitle content
+        # This works for all providers, unlike direct get_content()
+        download_subtitles([subtitle])  # modifies subtitle in-place, adding 'content'
+
+        if not hasattr(subtitle, 'content') or subtitle.content is None:
+            raise Exception("Download did not produce content")
+
+        # Content may be bytes; decode if needed
+        content = subtitle.content
+        if isinstance(content, bytes):
+            content = content.decode('utf-8', errors='replace')
+
         return content
     except Exception as e:
         logger.error(f"Error downloading subtitle {subtitle_id}: {e}", exc_info=True)
